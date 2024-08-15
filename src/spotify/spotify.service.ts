@@ -77,10 +77,16 @@ export class SpotifyService {
 			map(result => result.data),
 			tap(result => {
 				if (result.items.length > 0) {
-					const entities = result.items.map(item => this.spotifyAlbumRepository.create({ name: item.album.name, raw: item.album, spotifyId: item.album.id }));
-					this.spotifyAlbumRepository.save(entities).then(value => {
-						console.log('writing to db', value);
+					const entities = result.items.map(item => {
+						return this.spotifyAlbumRepository.create({
+							name: item.album.name,
+							raw: item.album,
+							spotifyId: item.album.id,
+							trackList: item.album.tracks.items
+						});
 					});
+
+					this.spotifyAlbumRepository.upsert(entities, ['spotifyId']);
 				}
 			})
 		);

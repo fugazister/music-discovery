@@ -7,7 +7,11 @@ import { DiscogsModule } from './discogs/discogs.module';
 import { SpotifyModule } from './spotify/spotify.module';
 import { SpotifyAlbum } from './spotify/spotify-album.entity';
 import { LibraryModule } from './library/library.module';
+import { BandcampAlbum } from './bandcamp/bandcamp-album.entity';
 import 'dotenv/config';
+import { Artist } from './library/artist.entity';
+import { Album } from './library/album.entity';
+import { SpotifyArtist } from './spotify/spotify-artist.entity';
 
 @Module({
 	imports: [
@@ -19,7 +23,11 @@ import 'dotenv/config';
 			password: process.env.DATABASE_PASSWORD,
 			database: 'music',
 			entities: [
-				SpotifyAlbum
+				Artist,
+				Album,
+				SpotifyAlbum,
+				SpotifyArtist,
+				BandcampAlbum
 			],
 			synchronize: true,
 		}),

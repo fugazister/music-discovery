@@ -1,20 +1,20 @@
 import { Entity, Column, PrimaryGeneratedColumn, PrimaryColumn, Unique } from 'typeorm';
 
 @Entity()
-@Unique(['spotifyId'])
-export class SpotifyAlbum {
+@Unique(['bandcampId'])
+export class BandcampAlbum {
 	@PrimaryGeneratedColumn()
 	id: number;
 
-	@PrimaryColumn('text')
-	spotifyId: string;
+	@PrimaryColumn()
+	bandcampId: string;
 
 	@Column('text')
 	name: string;
 
-	@Column('jsonb', { nullable: false })
+	@Column('jsonb')
 	raw: any;
 
-	@Column('jsonb', { nullable: false })
+	@Column('jsonb')
 	trackList: any;
 }
