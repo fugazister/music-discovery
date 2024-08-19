@@ -6,7 +6,12 @@ export class BandcampController {
 	constructor(private bandcampService: BandcampService) {}
 
 	@Post('populate-albums/:username')
-	albums(@Param('username') username: string) {
+	populateUserLibrary(@Param('username') username: string) {
 		return this.bandcampService.populateUserLibrary(username);
+	}
+
+	@Get('albums')
+	albums() {
+		return this.bandcampService.getLibrary();
 	}
 }

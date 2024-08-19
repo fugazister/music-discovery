@@ -11,7 +11,4 @@ export class BandcampArtist {
 
 	@Column('text')
 	name: string;
-
-	@Column('jsonb')
-	raw: any;
 }

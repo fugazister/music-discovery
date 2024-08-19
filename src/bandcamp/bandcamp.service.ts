@@ -1,6 +1,6 @@
 import { HttpService } from '@nestjs/axios';
 import { Injectable } from '@nestjs/common';
-import { EMPTY, expand, map, mergeMap, Observable, tap } from 'rxjs';
+import { EMPTY, expand, forkJoin, from, map, mergeMap, Observable, of, tap } from 'rxjs';
 import { JSDOM } from 'jsdom';
 import { BandcampAlbum } from './bandcamp-album.entity';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -8,6 +8,7 @@ import { Repository } from 'typeorm';
 import { LibraryService } from 'src/library/library.service';
 import { UserAlbum } from 'src/library/user-album.entity';
 import { User } from 'src/library/user.entity';
+import { BandcampArtist } from './bandcamp-artist.entity';
 
 const BANDCAMP_SEARCH_URL = 'https://bandcamp.com/search?q=';
 const BANDCAMP_LIBRARY_URL = 'https://bandcamp.com/';
@@ -26,6 +27,8 @@ export class BandcampService {
 		private readonly httpService: HttpService,
 		@InjectRepository(BandcampAlbum)
 		private readonly bandcampAlbumRepository: Repository<BandcampAlbum>,
+		@InjectRepository(BandcampArtist)
+		private readonly bandcampArtistRepository: Repository<BandcampArtist>,
 		@InjectRepository(UserAlbum)
 		private readonly userAlbumRepository: Repository<UserAlbum>,
 		@InjectRepository(User)
@@ -33,14 +36,7 @@ export class BandcampService {
 		private readonly libraryService: LibraryService
 	) {}
 
-	// TODO: rewrite as job
-	async populateUserLibrary(userName: string) {
-		const user = await this.userRepository.findOne({
-			where: {
-				name: 'me'
-			}
-		});
-
+	populateUserLibrary(userName: string) {
 		return this.httpService.get(`${BANDCAMP_LIBRARY_URL}${userName}`).pipe(
 			map(response => response.data),
 			mergeMap(response => {
@@ -53,23 +49,14 @@ export class BandcampService {
 				const lastToken = pageData.collection_data.last_token;
 				const itemCache = pageData.item_cache.collection;
 
-				const cache = Object.values(itemCache).map((item: any) => {
-					return this.bandcampAlbumRepository.create({
-						name: item.item_title,
-						raw: item,
-						bandcampId: item.album_id,
-						bandname: item.band_name || 'band',
-					});
-				});
-
-				this.bandcampAlbumRepository.upsert(cache, ['bandcampId']);
-
-				return this.makeRequestAndSaveData(lastToken, fanId, user);
+				return this.saveData({ items: Object.values(itemCache) }).pipe(
+					mergeMap(() => this.makeRequestAndSaveData(lastToken, fanId))
+				);
 			}),
 			expand(res => {
 				if (res.more_available) {
 					const fanId = res.items[0].fan_id;
-					return this.makeRequestAndSaveData(res.last_token, fanId, user);
+					return this.makeRequestAndSaveData(res.last_token, fanId);
 				} else {
 					return EMPTY;
 				}
@@ -77,29 +64,63 @@ export class BandcampService {
 		);
 	}
 
-	makeRequestAndSaveData(lastToken: string, fanId: string, user: User) {
+	makeRequestAndSaveData(lastToken: string, fanId: string) {
 		return this.httpService.post(BANDCAMP_COLLECTION_URL, {
 			count: 30,
 			fan_id: fanId,
 			older_than_token: lastToken
-		}).pipe(map(response => {
-			response.data.items.map(async item => {
-				const bandcampAlbumEntity = this.bandcampAlbumRepository.create({
-					name: item.album_title,
-					raw: item,
-					bandcampId: item.album_id,
-					bandname: item.band_name || 'band',
-				});
+		}).pipe(mergeMap(response => this.saveData(response.data)));
+	}
 
-				this.bandcampAlbumRepository.upsert(bandcampAlbumEntity, ['bandcampId']);
+	saveData(data) {
+		const items = data.items;
+		return forkJoin(items.map(item => {
+			const artist = this.bandcampArtistRepository.create({
+				bandcampId: item.band_id,
+				name: item.band_name
 			});
 
-			return response.data;
-		}));
+			return from(this.bandcampArtistRepository.upsert(artist, ['bandcampId'])).pipe(
+				mergeMap(() => {
+					const bandcampAlbumEntity = this.bandcampAlbumRepository.create({
+						name: item.item_title,
+						raw: item,
+						bandcampId: item.item_id,
+						artists: [artist]
+					});
+
+					return forkJoin([
+						from(this.bandcampAlbumRepository.findOne({
+							where: {
+								bandcampId: bandcampAlbumEntity.bandcampId
+							}
+						})),
+						of(bandcampAlbumEntity)
+					]);
+				}),
+				mergeMap(([found, bandcampAlbumEntity]) => {
+					if (!found) {
+						return from(this.bandcampAlbumRepository.save(
+							bandcampAlbumEntity
+						));
+					}
+
+					return of(null);
+				})
+			)
+		})).pipe(map(() => data));
 	}
 
 	getAlbumInfo(url) {
 
+	}
+
+	getLibrary() {
+		return this.bandcampAlbumRepository.find({
+			relations: {
+				artists: true
+			}
+		});
 	}
 
 	search(searchTerm: string): Observable<BandcampArtistSearchResult[]> {

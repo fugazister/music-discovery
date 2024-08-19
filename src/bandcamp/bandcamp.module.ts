@@ -7,9 +7,19 @@ import { BandcampController } from './bandcamp.controller';
 import { LibraryModule } from 'src/library/library.module';
 import { User } from 'src/library/user.entity';
 import { UserAlbum } from 'src/library/user-album.entity';
+import { BandcampArtist } from './bandcamp-artist.entity';
 
 @Module({
-	imports: [HttpModule, TypeOrmModule.forFeature([BandcampAlbum, User, UserAlbum]), LibraryModule],
+	imports: [
+		HttpModule,
+		TypeOrmModule.forFeature([
+			BandcampAlbum,
+			BandcampArtist,
+			User,
+			UserAlbum
+		]),
+		LibraryModule
+	],
 	providers: [BandcampService],
 	exports: [BandcampService],
 	controllers: [BandcampController]
