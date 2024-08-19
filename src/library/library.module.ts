@@ -21,6 +21,7 @@ import { SpotifyArtist } from 'src/spotify/spotify-artist.entity';
 		SpotifyArtist,
 	])],
   providers: [LibraryService],
-  controllers: [LibraryController]
+  controllers: [LibraryController],
+	exports: [LibraryService]
 })
 export class LibraryModule {}

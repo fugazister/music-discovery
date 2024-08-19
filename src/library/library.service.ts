@@ -28,24 +28,39 @@ export class LibraryService {
 		private readonly bandcampAlbumRepository: Repository<BandcampAlbum>
 	) {}
 
-
 	async populateAlbumsBySpotify() {
 		const albums = await this.spotifyAlbumRepository.find();
-
-		return albums[0];
+		return albums;
 	}
 
 	async populateAlbumsByBandcamp() {
 		const albums = await this.bandcampAlbumRepository.find();
-		albums.map(album => {
-			// do we need to update or create new?
-			// how do we know if album from spotify is similar to bandcamp album
+		return albums;
+	}
+
+	async setUser() {
+		const me = await this.userRepository.findOne({
+			where: {
+				name: 'me'
+			}
 		});
 
-		return albums[0];
+		if (!me) {
+			this.userRepository.insert({
+				name: 'me'
+			});
+		}
 	}
 
 	getArtists() {
 		return this.artistRepository.find();
+	}
+
+	getUserAlbums() {
+
+	}
+
+	getAlbums() {
+
 	}
 }

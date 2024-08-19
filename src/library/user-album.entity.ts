@@ -1,19 +1,28 @@
-import { Column, Entity, JoinColumn, OneToOne, PrimaryGeneratedColumn } from "typeorm";
-import { User } from "./user.entity";
+import { Column, Entity, JoinColumn, ManyToOne, OneToOne, PrimaryColumn, PrimaryGeneratedColumn, Unique } from 'typeorm';
+import { User } from './user.entity';
+import { Album } from './album.entity';
 
 // knows if user has album in some service
 @Entity()
+@Unique(['album.id'])
 export class UserAlbum {
 	@PrimaryGeneratedColumn()
 	id: number;
 
-	@OneToOne(() => User)
-	@JoinColumn()
+	@ManyToOne(() => User, user => user.albums)
 	user: User;
 
-	@Column()
+	@OneToOne(() => Album)
+	@JoinColumn()
+	album: Album;
+
+	@Column({
+		nullable: true,
+	})
 	hasSpotifyAlbum: boolean;
 
-	@Column()
+	@Column({
+		nullable: true,
+	})
 	hasBandcampAlbum: boolean;
 }

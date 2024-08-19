@@ -9,12 +9,12 @@ export class BandcampAlbum {
 	@PrimaryColumn()
 	bandcampId: string;
 
+	@PrimaryColumn('text')
+	bandname: string;
+
 	@Column('text')
 	name: string;
 
 	@Column('jsonb')
 	raw: any;
-
-	@Column('jsonb')
-	trackList: any;
 }

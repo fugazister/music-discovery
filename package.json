@@ -28,6 +28,7 @@
     "@nestjs/typeorm": "^10.0.2",
     "@spotify/web-api-ts-sdk": "^1.2.0",
     "axios": "^1.7.3",
+    "bee-queue": "^1.7.1",
     "dotenv": "^16.4.5",
     "jsdom": "^24.1.1",
     "pg": "^8.12.0",

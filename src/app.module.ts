@@ -12,6 +12,8 @@ import 'dotenv/config';
 import { Artist } from './library/artist.entity';
 import { Album } from './library/album.entity';
 import { SpotifyArtist } from './spotify/spotify-artist.entity';
+import { User } from './library/user.entity';
+import { UserAlbum } from './library/user-album.entity';
 
 @Module({
 	imports: [
@@ -27,7 +29,9 @@ import { SpotifyArtist } from './spotify/spotify-artist.entity';
 				Album,
 				SpotifyAlbum,
 				SpotifyArtist,
-				BandcampAlbum
+				BandcampAlbum,
+				User,
+				UserAlbum,
 			],
 			synchronize: true,
 		}),

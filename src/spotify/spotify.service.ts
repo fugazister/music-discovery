@@ -7,6 +7,10 @@ import { URLSearchParams } from 'url';
 import { Repository } from 'typeorm';
 import { SpotifyAlbum } from './spotify-album.entity';
 import { InjectRepository } from '@nestjs/typeorm';
+import { User } from 'src/library/user.entity';
+import { UserAlbum } from 'src/library/user-album.entity';
+import { LibraryService } from 'src/library/library.service';
+import { SpotifyArtist } from './spotify-artist.entity';
 
 interface SpotifyAccessInfo {
 	accessToken: string;
@@ -20,8 +24,15 @@ export class SpotifyService {
 
 	constructor(
 		private readonly httpService: HttpService,
+		@InjectRepository(SpotifyArtist)
+		private readonly spotifyArtistRepository: Repository<SpotifyArtist>,
 		@InjectRepository(SpotifyAlbum)
-		private readonly spotifyAlbumRepository: Repository<SpotifyAlbum>
+		private readonly spotifyAlbumRepository: Repository<SpotifyAlbum>,
+		@InjectRepository(User)
+		private readonly userRepository: Repository<User>,
+		@InjectRepository(UserAlbum)
+		private readonly userAlbumRepository: Repository<UserAlbum>,
+		private readonly libraryService: LibraryService
 	) {}
 
 	doAuth(res: Response) {
@@ -65,7 +76,7 @@ export class SpotifyService {
 	
 	}
 
-	makeRequestAndSaveData(url: string) {
+	makeRequestAndSaveData(url: string, user: User) {
 		const requestParams = {
 			method: 'GET',
 			url,
@@ -75,24 +86,73 @@ export class SpotifyService {
 
 		return this.httpService.request(requestParams).pipe(
 			map(result => result.data),
-			tap(result => {
-				if (result.items.length > 0) {
-					const entities = result.items.map(item => {
-						return this.spotifyAlbumRepository.create({
+			tap(async result => {
+				const items = result.items;
+
+				if (items.length > 0) {
+
+					for (const item of items) {
+						const artistEntities = item.album.artists.map(async artist => {
+							const found = await this.spotifyArtistRepository.findOne({
+								where: {
+									spotifyId: artist.id,
+									name: artist.name,
+								}
+							});
+
+							if (found) {
+								return found;
+							}
+
+							if (!found) {
+								console.log('name', artist.name, 'found', found);
+
+								const newArtist = this.spotifyArtistRepository.create({
+									spotifyId: artist.id,
+									name: artist.name,
+									raw: artist
+								});
+
+								await this.spotifyArtistRepository.save(newArtist);
+
+								return newArtist;
+							}
+						});
+
+						const resolvedArtists = await Promise.all(artistEntities);
+
+						const spotifyAlbumEntity = this.spotifyAlbumRepository.create({
 							name: item.album.name,
 							raw: item.album,
 							spotifyId: item.album.id,
-							trackList: item.album.tracks.items
+							trackList: item.album.tracks.items,
+							artists: resolvedArtists
 						});
-					});
 
-					this.spotifyAlbumRepository.upsert(entities, ['spotifyId']);
+						const foundAlbum = await this.spotifyAlbumRepository.findOne({
+							where: {
+								spotifyId: spotifyAlbumEntity.spotifyId
+							},
+							relations: {
+								artists: true
+							}
+						});
+
+						if (!foundAlbum) {
+							return await this.spotifyAlbumRepository.save(spotifyAlbumEntity);
+						}
+
+						if (foundAlbum) {
+							foundAlbum.artists = [...spotifyAlbumEntity.artists, ...foundAlbum.artists];
+							return await this.spotifyAlbumRepository.save(foundAlbum);
+						}
+					}
 				}
 			})
 		);
 	}
 
-	requestUserLikedAlbums() {
+	async requestUserLikedAlbums() {
 		const queryParams = new URLSearchParams({
 			limit: '50',
 			offset: '0',
@@ -100,10 +160,16 @@ export class SpotifyService {
 
 		const url = 'https://api.spotify.com/v1/me/albums?' + queryParams.toString();
 
-		return this.makeRequestAndSaveData(url).pipe(
+		const user = await this.userRepository.findOne({
+			where: {
+				name: 'me'
+			}
+		});
+
+		return this.makeRequestAndSaveData(url, user).pipe(
 			expand(res => {
 				if (res.next) {
-					return this.makeRequestAndSaveData(res.next);
+					return this.makeRequestAndSaveData(res.next, user);
 				} else {
 					return EMPTY;
 				}
@@ -112,6 +178,10 @@ export class SpotifyService {
 	}
 
 	getLikedAlbums() {
-		return this.spotifyAlbumRepository.find();
+		return this.spotifyAlbumRepository.find({
+			relations: {
+				artists: true
+			}
+		});
 	}
 }

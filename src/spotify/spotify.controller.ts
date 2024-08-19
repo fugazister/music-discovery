@@ -15,7 +15,7 @@ export class SpotifyController {
 	@Get('accept-auth')
 	spotifyAcceptAuth(@Query() params, @Res() res: Response) {
 		return this.spotifyService.acceptAccessToken(params.code).pipe(finalize(() => {
-			res.redirect('http://localhost:4200/');
+			res.redirect('http://localhost:4200/spotify');
 		}));
 	}
 

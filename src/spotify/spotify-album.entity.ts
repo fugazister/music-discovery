@@ -1,4 +1,5 @@
-import { Entity, Column, PrimaryGeneratedColumn, PrimaryColumn, Unique } from 'typeorm';
+import { Entity, Column, PrimaryGeneratedColumn, PrimaryColumn, Unique, ManyToMany, JoinTable } from 'typeorm';
+import { SpotifyArtist } from './spotify-artist.entity';
 
 @Entity()
 @Unique(['spotifyId'])
@@ -12,9 +13,13 @@ export class SpotifyAlbum {
 	@Column('text')
 	name: string;
 
-	@Column('jsonb', { nullable: false })
+	@Column('jsonb', { nullable: true })
 	raw: any;
 
-	@Column('jsonb', { nullable: false })
+	@Column('jsonb', { nullable: true })
 	trackList: any;
+
+	@ManyToMany(() => SpotifyArtist)
+	@JoinTable()
+	artists: SpotifyArtist[];
 }

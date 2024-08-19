@@ -1,13 +1,13 @@
 import { Column, Entity, PrimaryColumn, PrimaryGeneratedColumn, Unique } from "typeorm";
 
 @Entity()
-@Unique(['spotifyId'])
-export class SpotifyArtist {
+@Unique(['bandcampId'])
+export class BandcampArtist {
 	@PrimaryGeneratedColumn()
 	id: number;
 
 	@PrimaryColumn('text')
-	spotifyId: string;
+	bandcampId: string;
 
 	@Column('text')
 	name: string;

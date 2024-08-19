@@ -9,12 +9,9 @@ export class Artist {
 	@PrimaryColumn('text')
 	name: string;
 
-	@PrimaryColumn('text')
+	@Column('text', { nullable: true })
 	spotifyId: string;
 
-	@PrimaryColumn('text')
+	@Column('text', { nullable: true })
 	bandcampId: string;
-
-	@Column('jsonb')
-	spotifyMeta: any;
 }

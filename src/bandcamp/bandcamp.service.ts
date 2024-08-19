@@ -5,6 +5,9 @@ import { JSDOM } from 'jsdom';
 import { BandcampAlbum } from './bandcamp-album.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { LibraryService } from 'src/library/library.service';
+import { UserAlbum } from 'src/library/user-album.entity';
+import { User } from 'src/library/user.entity';
 
 const BANDCAMP_SEARCH_URL = 'https://bandcamp.com/search?q=';
 const BANDCAMP_LIBRARY_URL = 'https://bandcamp.com/';
@@ -22,10 +25,22 @@ export class BandcampService {
 	constructor(
 		private readonly httpService: HttpService,
 		@InjectRepository(BandcampAlbum)
-		private readonly bandcampAlbumRepository: Repository<BandcampAlbum>
+		private readonly bandcampAlbumRepository: Repository<BandcampAlbum>,
+		@InjectRepository(UserAlbum)
+		private readonly userAlbumRepository: Repository<UserAlbum>,
+		@InjectRepository(User)
+		private readonly userRepository: Repository<User>,
+		private readonly libraryService: LibraryService
 	) {}
 
-	populateUserLibrary(userName: string) {
+	// TODO: rewrite as job
+	async populateUserLibrary(userName: string) {
+		const user = await this.userRepository.findOne({
+			where: {
+				name: 'me'
+			}
+		});
+
 		return this.httpService.get(`${BANDCAMP_LIBRARY_URL}${userName}`).pipe(
 			map(response => response.data),
 			mergeMap(response => {
@@ -39,23 +54,22 @@ export class BandcampService {
 				const itemCache = pageData.item_cache.collection;
 
 				const cache = Object.values(itemCache).map((item: any) => {
-					console.log('url', item.item_url);
 					return this.bandcampAlbumRepository.create({
 						name: item.item_title,
 						raw: item,
 						bandcampId: item.album_id,
-						trackList: []
+						bandname: item.band_name || 'band',
 					});
 				});
 
 				this.bandcampAlbumRepository.upsert(cache, ['bandcampId']);
 
-				return this.makeRequestAndSaveData(lastToken, fanId);
+				return this.makeRequestAndSaveData(lastToken, fanId, user);
 			}),
 			expand(res => {
 				if (res.more_available) {
 					const fanId = res.items[0].fan_id;
-					return this.makeRequestAndSaveData(res.last_token, fanId);
+					return this.makeRequestAndSaveData(res.last_token, fanId, user);
 				} else {
 					return EMPTY;
 				}
@@ -63,24 +77,22 @@ export class BandcampService {
 		);
 	}
 
-	makeRequestAndSaveData(lastToken: string, fanId: string) {
+	makeRequestAndSaveData(lastToken: string, fanId: string, user: User) {
 		return this.httpService.post(BANDCAMP_COLLECTION_URL, {
 			count: 30,
 			fan_id: fanId,
 			older_than_token: lastToken
 		}).pipe(map(response => {
-			const entities = response.data.items.map(item => {
-				const url = item.item_url;
-				console.log('url', url);
-				return this.bandcampAlbumRepository.create({
+			response.data.items.map(async item => {
+				const bandcampAlbumEntity = this.bandcampAlbumRepository.create({
 					name: item.album_title,
 					raw: item,
 					bandcampId: item.album_id,
-					trackList: []
+					bandname: item.band_name || 'band',
 				});
-			});
 
-			this.bandcampAlbumRepository.upsert(entities, ['bandcampId']);
+				this.bandcampAlbumRepository.upsert(bandcampAlbumEntity, ['bandcampId']);
+			});
 
 			return response.data;
 		}));
