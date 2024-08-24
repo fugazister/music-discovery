@@ -1,8 +1,8 @@
 import { HttpService } from '@nestjs/axios';
-import { Injectable } from '@nestjs/common';
+import { ConsoleLogger, Injectable } from '@nestjs/common';
 import { AxiosRequestConfig } from 'axios';
 import { Response } from 'express';
-import { delay, EMPTY, expand, map, tap } from 'rxjs';
+import { delay, EMPTY, expand, forkJoin, from, map, merge, mergeMap, of, tap } from 'rxjs';
 import { URLSearchParams } from 'url';
 import { Repository } from 'typeorm';
 import { SpotifyAlbum } from './spotify-album.entity';
@@ -76,7 +76,7 @@ export class SpotifyService {
 	
 	}
 
-	makeRequestAndSaveData(url: string, user: User) {
+	makeRequestAndSaveData(url: string) {
 		const requestParams = {
 			method: 'GET',
 			url,
@@ -85,74 +85,52 @@ export class SpotifyService {
 		};
 
 		return this.httpService.request(requestParams).pipe(
-			map(result => result.data),
-			tap(async result => {
-				const items = result.items;
+			mergeMap(result => {
+				const items = result.data.items;
 
 				if (items.length > 0) {
-
-					for (const item of items) {
-						const artistEntities = item.album.artists.map(async artist => {
-							const found = await this.spotifyArtistRepository.findOne({
-								where: {
-									spotifyId: artist.id,
-									name: artist.name,
-								}
+					return forkJoin(items.map(item => {
+						const artists = item.album.artists.map(artist => {
+							return this.spotifyArtistRepository.create({
+								name: artist.name,
+								spotifyId: artist.id,
+								raw: artist
 							});
+						});
 
-							if (found) {
-								return found;
-							}
-
-							if (!found) {
-								console.log('name', artist.name, 'found', found);
-
-								const newArtist = this.spotifyArtistRepository.create({
-									spotifyId: artist.id,
-									name: artist.name,
-									raw: artist
+						return from(this.spotifyArtistRepository.upsert(artists, ['spotifyId'])).pipe(
+							mergeMap((res) => {
+								console.log('spotifyArtistRepository.upsert', res)
+								const spotifyAlbumEntity = this.spotifyAlbumRepository.create({
+									name: item.album.name,
+									raw: item.album,
+									spotifyId: item.album.id,
+									trackList: item.album.tracks.items,
+									artists: artists
 								});
 
-								await this.spotifyArtistRepository.save(newArtist);
+								return from(this.spotifyAlbumRepository.findOne({
+									where: {
+										spotifyId: spotifyAlbumEntity.spotifyId
+									}
+								})).pipe(mergeMap(found => {
+									if (!found) {
+										return from(this.spotifyAlbumRepository.save(spotifyAlbumEntity));
+									}
+									return of(null);
+								}));
+							})
+						);
 
-								return newArtist;
-							}
-						});
-
-						const resolvedArtists = await Promise.all(artistEntities);
-
-						const spotifyAlbumEntity = this.spotifyAlbumRepository.create({
-							name: item.album.name,
-							raw: item.album,
-							spotifyId: item.album.id,
-							trackList: item.album.tracks.items,
-							artists: resolvedArtists
-						});
-
-						const foundAlbum = await this.spotifyAlbumRepository.findOne({
-							where: {
-								spotifyId: spotifyAlbumEntity.spotifyId
-							},
-							relations: {
-								artists: true
-							}
-						});
-
-						if (!foundAlbum) {
-							return await this.spotifyAlbumRepository.save(spotifyAlbumEntity);
-						}
-
-						if (foundAlbum) {
-							foundAlbum.artists = [...spotifyAlbumEntity.artists, ...foundAlbum.artists];
-							return await this.spotifyAlbumRepository.save(foundAlbum);
-						}
-					}
+					})).pipe(map(() => result.data));
 				}
+
+				return of(result.data);
 			})
 		);
 	}
 
-	async requestUserLikedAlbums() {
+	requestUserLikedAlbums() {
 		const queryParams = new URLSearchParams({
 			limit: '50',
 			offset: '0',
@@ -160,16 +138,10 @@ export class SpotifyService {
 
 		const url = 'https://api.spotify.com/v1/me/albums?' + queryParams.toString();
 
-		const user = await this.userRepository.findOne({
-			where: {
-				name: 'me'
-			}
-		});
-
-		return this.makeRequestAndSaveData(url, user).pipe(
+		return this.makeRequestAndSaveData(url).pipe(
 			expand(res => {
 				if (res.next) {
-					return this.makeRequestAndSaveData(res.next, user);
+					return this.makeRequestAndSaveData(res.next);
 				} else {
 					return EMPTY;
 				}

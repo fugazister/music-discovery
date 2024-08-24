@@ -17,6 +17,11 @@ export class LibraryController {
 		return this.libraryService.populateAlbumsByBandcamp();
 	}
 
+	@Post('albums')
+	populateAlbums() {
+		return this.libraryService.populateAlbums();
+	}
+
 	@Get('albums')
 	getAlbums() {
 		return this.libraryService.getAlbums();

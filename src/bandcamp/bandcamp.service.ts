@@ -1,6 +1,6 @@
 import { HttpService } from '@nestjs/axios';
 import { Injectable } from '@nestjs/common';
-import { EMPTY, expand, forkJoin, from, map, mergeMap, Observable, of, tap } from 'rxjs';
+import { catchError, EMPTY, expand, finalize, forkJoin, from, map, mergeMap, Observable, of, tap } from 'rxjs';
 import { JSDOM } from 'jsdom';
 import { BandcampAlbum } from './bandcamp-album.entity';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -9,6 +9,8 @@ import { LibraryService } from 'src/library/library.service';
 import { UserAlbum } from 'src/library/user-album.entity';
 import { User } from 'src/library/user.entity';
 import { BandcampArtist } from './bandcamp-artist.entity';
+import { BandcampTrack } from './bandcamp-track.entity';
+import { TasksService } from 'src/tasks/tasks.service';
 
 const BANDCAMP_SEARCH_URL = 'https://bandcamp.com/search?q=';
 const BANDCAMP_LIBRARY_URL = 'https://bandcamp.com/';
@@ -33,7 +35,10 @@ export class BandcampService {
 		private readonly userAlbumRepository: Repository<UserAlbum>,
 		@InjectRepository(User)
 		private readonly userRepository: Repository<User>,
-		private readonly libraryService: LibraryService
+		@InjectRepository(BandcampTrack)
+		private readonly bandcampTrackRepository: Repository<BandcampTrack>,
+		private readonly libraryService: LibraryService,
+		private readonly tasksService: TasksService
 	) {}
 
 	populateUserLibrary(userName: string) {
@@ -111,8 +116,66 @@ export class BandcampService {
 		})).pipe(map(() => data));
 	}
 
-	getAlbumInfo(url) {
+	populateAlbumTrackList(album) {
+		const task = this.tasksService.createTask();
 
+		task.started();
+		return this.httpService.get(album.raw.item_url).pipe(
+			catchError(error => {
+				task.failed(error);
+				return EMPTY;
+			}),
+			map(response => response.data),
+			map(response => {
+				if (!response) return EMPTY;
+
+				const dom = new JSDOM(response);
+				const document = dom.window.document;
+				let albumData = '';
+
+				for (let i = 0; i < document.scripts.length; i++) {
+					const script = document.scripts.item(i);
+					if (script.type === 'application/ld+json') {
+						albumData = script.text;
+						break;
+					}
+				}
+
+				if (!albumData) {
+					task.failed('no album data');
+					return void 0;
+				}
+				
+				return JSON.parse(albumData);
+			}),
+			map(albumData => {
+				if (!albumData) {
+					return EMPTY
+				};
+
+				if (!albumData.track) {
+					task.failed('no tracklist');
+					return EMPTY;
+				}
+
+				return albumData.track.itemListElement.map(item => {
+					return this.bandcampTrackRepository.create({
+						album: album,
+						name: item.item.name
+					});
+				});
+			}),
+			mergeMap(tracks => {
+				if (tracks.length > 0) {
+					return from(this.bandcampTrackRepository.save(tracks));
+				}
+				task.failed('no tracks created');
+				return EMPTY;
+			}),
+			finalize(() => {
+				task.completed();
+			})
+		)
 	}
 
 	getLibrary() {

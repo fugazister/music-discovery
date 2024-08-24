@@ -15,6 +15,9 @@ import { SpotifyArtist } from './spotify/spotify-artist.entity';
 import { User } from './library/user.entity';
 import { UserAlbum } from './library/user-album.entity';
 import { BandcampArtist } from './bandcamp/bandcamp-artist.entity';
+import { BandcampTrack } from './bandcamp/bandcamp-track.entity';
+import { TaskEntity } from './tasks/task.entity';
+import { TasksModule } from './tasks/tasks.module';
 
 @Module({
 	imports: [
@@ -32,8 +35,10 @@ import { BandcampArtist } from './bandcamp/bandcamp-artist.entity';
 				SpotifyArtist,
 				BandcampAlbum,
 				BandcampArtist,
+				BandcampTrack,
 				User,
 				UserAlbum,
+				TaskEntity,
 			],
 			synchronize: true,
 		}),
@@ -41,6 +46,7 @@ import { BandcampArtist } from './bandcamp/bandcamp-artist.entity';
 		DiscogsModule,
 		SpotifyModule,
 		LibraryModule,
+		TasksModule,
 	],
 	controllers: [AppController],
 	providers: [AppService],

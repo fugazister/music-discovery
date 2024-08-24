@@ -1,13 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Album } from './album.entity';
-import { Repository } from 'typeorm';
+import { IsNull, Not, Repository } from 'typeorm';
 import { Artist } from './artist.entity';
 import { UserAlbum } from './user-album.entity';
 import { User } from './user.entity';
 import { SpotifyAlbum } from 'src/spotify/spotify-album.entity';
 import { BandcampAlbum } from 'src/bandcamp/bandcamp-album.entity';
 import { SpotifyArtist } from 'src/spotify/spotify-artist.entity';
+import { forkJoin, from, map, merge, mergeMap, tap, zip } from 'rxjs';
 
 @Injectable()
 export class LibraryService {
@@ -56,11 +57,11 @@ export class LibraryService {
 		return this.artistRepository.find();
 	}
 
-	getUserAlbums() {
-
+	populateAlbums() {
+		// need to create index with ids of services
 	}
 
 	getAlbums() {
-
+		return from(this.userAlbumRepository.find());
 	}
 }
