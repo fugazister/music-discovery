@@ -30,7 +30,7 @@ export class LibraryService {
 	) {}
 
 	setUser() {
-		from(this.userRepository.findOne({
+		return from(this.userRepository.findOne({
 			where: {
 				name: 'me'
 			}

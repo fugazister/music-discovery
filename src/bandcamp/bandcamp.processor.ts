@@ -4,6 +4,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { forkJoin, from, lastValueFrom, mergeMap, of } from 'rxjs';
 import { BandcampArtist } from './bandcamp-artist.entity';
+import { Job } from 'bullmq';
 
 export const SAVE_ALBUM_JOB = 'save-album';
 
@@ -18,7 +19,7 @@ export class BandcampConsumer extends WorkerHost {
 		super();
 	}
 
-	process(job): Promise<any> {
+	process(job: Job): Promise<any> {
 		switch (job.name) {
 			case SAVE_ALBUM_JOB:
 				return this.saveAlbum(job.data);
@@ -53,9 +54,12 @@ export class BandcampConsumer extends WorkerHost {
 				}),
 				mergeMap(([found, bandcampAlbumEntity]) => {
 					if (!found) {
+						console.log('here');
+
 						return from(this.bandcampAlbumRepository.save(
 							bandcampAlbumEntity
 						));
+
 					}
 
 					return of(null);

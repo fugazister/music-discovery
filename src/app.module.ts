@@ -18,6 +18,8 @@ import { BandcampArtist } from './bandcamp/bandcamp-artist.entity';
 import { BandcampTrack } from './bandcamp/bandcamp-track.entity';
 import { SpotifySession } from './spotify/spotify-session.entity';
 import { BullModule } from '@nestjs/bullmq';
+import { ProfileController } from './profile/profile.controller';
+import { ProfileService } from './profile/profile.service';
 
 @Module({
 	imports: [
@@ -53,7 +55,7 @@ import { BullModule } from '@nestjs/bullmq';
 		SpotifyModule,
 		LibraryModule,
 	],
-	controllers: [AppController],
-	providers: [AppService],
+	controllers: [AppController, ProfileController],
+	providers: [AppService, ProfileService],
 })
 export class AppModule {}

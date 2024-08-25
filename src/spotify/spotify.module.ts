@@ -10,6 +10,8 @@ import { UserAlbum } from 'src/library/user-album.entity';
 import { LibraryModule } from 'src/library/library.module';
 import { SpotifyArtist } from './spotify-artist.entity';
 import { SpotifySession } from './spotify-session.entity';
+import { BullModule } from '@nestjs/bullmq';
+import { SpotifyConsumer } from './spotify.processor';
 
 @Module({
 	imports: [
@@ -21,9 +23,12 @@ import { SpotifySession } from './spotify-session.entity';
 			SpotifySession
 		]),
 		HttpModule,
-		LibraryModule
+		LibraryModule,
+		BullModule.registerQueue({
+			name: 'spotify',
+		})
 	],
-	providers: [SpotifyService],
+	providers: [SpotifyService, SpotifyConsumer],
 	exports: [SpotifyService],
 	controllers: [SpotifyController],
 })

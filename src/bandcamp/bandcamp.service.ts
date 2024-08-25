@@ -97,45 +97,6 @@ export class BandcampService {
 		);
 	}
 
-	saveData({ items, type }) {
-		return forkJoin(items.map(item => {
-			const artist = this.bandcampArtistRepository.create({
-				bandcampId: item.band_id,
-				name: item.band_name
-			});
-
-			return from(this.bandcampArtistRepository.upsert(artist, ['bandcampId'])).pipe(
-				mergeMap(() => {
-					const bandcampAlbumEntity = this.bandcampAlbumRepository.create({
-						name: item.item_title,
-						raw: item,
-						bandcampId: item.item_id,
-						albumType: type,
-						artists: [artist]
-					});
-
-					return forkJoin([
-						from(this.bandcampAlbumRepository.findOne({
-							where: {
-								bandcampId: bandcampAlbumEntity.bandcampId
-							}
-						})),
-						of(bandcampAlbumEntity)
-					]);
-				}),
-				mergeMap(([found, bandcampAlbumEntity]) => {
-					if (!found) {
-						return from(this.bandcampAlbumRepository.save(
-							bandcampAlbumEntity
-						));
-					}
-
-					return of(null);
-				})
-			)
-		}));
-	}
-
 	populateAlbumTrackList(album) {
 		return this.httpService.get(album.raw.item_url).pipe(
 			catchError(error => {

@@ -14,7 +14,7 @@ export class AppController implements OnModuleInit {
 	) {}
 
 	onModuleInit() {
-		this.librarySerivce.setUser();
+		this.librarySerivce.setUser().subscribe();
 	}
 
 	@Get('artist/:name')

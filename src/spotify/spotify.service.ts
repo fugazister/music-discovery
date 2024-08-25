@@ -12,6 +12,9 @@ import { UserAlbum } from 'src/library/user-album.entity';
 import { LibraryService } from 'src/library/library.service';
 import { SpotifyArtist } from './spotify-artist.entity';
 import { SpotifySession } from './spotify-session.entity';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
+import { SAVE_ALBUM_JOB } from './spotify.processor';
 
 @Injectable()
 export class SpotifyService {
@@ -23,7 +26,9 @@ export class SpotifyService {
 		private readonly spotifyAlbumRepository: Repository<SpotifyAlbum>,
 		@InjectRepository(SpotifySession)
 		private readonly sessionRepository: Repository<SpotifySession>,
-		private readonly libraryService: LibraryService
+		private readonly libraryService: LibraryService,
+		@InjectQueue('spotify')
+		private readonly spotifyQueue: Queue
 	) {}
 
 	doAuth(res: Response) {
@@ -123,39 +128,7 @@ export class SpotifyService {
 						const items = result.data.items;
 		
 						if (items.length > 0) {
-							return forkJoin(items.map(item => {
-								const artists = item.album.artists.map(artist => {
-									return this.spotifyArtistRepository.create({
-										name: artist.name,
-										spotifyId: artist.id,
-										raw: artist
-									});
-								});
-		
-								return from(this.spotifyArtistRepository.upsert(artists, ['spotifyId'])).pipe(
-									mergeMap((res) => {
-										const spotifyAlbumEntity = this.spotifyAlbumRepository.create({
-											name: item.album.name,
-											raw: item.album,
-											spotifyId: item.album.id,
-											trackList: item.album.tracks.items,
-											artists: artists
-										});
-		
-										return from(this.spotifyAlbumRepository.findOne({
-											where: {
-												spotifyId: spotifyAlbumEntity.spotifyId
-											}
-										})).pipe(mergeMap(found => {
-											if (!found) {
-												return from(this.spotifyAlbumRepository.save(spotifyAlbumEntity));
-											}
-											return of(null);
-										}));
-									})
-								);
-		
-							})).pipe(map(() => result.data));
+							this.spotifyQueue.add(SAVE_ALBUM_JOB, { items: items });
 						}
 		
 						return of(result.data);
