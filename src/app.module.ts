@@ -16,9 +16,8 @@ import { User } from './library/user.entity';
 import { UserAlbum } from './library/user-album.entity';
 import { BandcampArtist } from './bandcamp/bandcamp-artist.entity';
 import { BandcampTrack } from './bandcamp/bandcamp-track.entity';
-import { TaskEntity } from './tasks/task.entity';
-import { TasksModule } from './tasks/tasks.module';
 import { SpotifySession } from './spotify/spotify-session.entity';
+import { BullModule } from '@nestjs/bullmq';
 
 @Module({
 	imports: [
@@ -39,16 +38,20 @@ import { SpotifySession } from './spotify/spotify-session.entity';
 				BandcampTrack,
 				User,
 				UserAlbum,
-				TaskEntity,
 				SpotifySession,
 			],
 			synchronize: true,
+		}),
+		BullModule.forRoot({
+			connection: {
+				host: 'localhost',
+				port: 6379,
+			},
 		}),
 		BandcampModule,
 		DiscogsModule,
 		SpotifyModule,
 		LibraryModule,
-		TasksModule,
 	],
 	controllers: [AppController],
 	providers: [AppService],

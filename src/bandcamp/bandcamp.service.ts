@@ -1,8 +1,8 @@
 import { HttpService } from '@nestjs/axios';
 import { Injectable } from '@nestjs/common';
-import { catchError, EMPTY, expand, finalize, forkJoin, from, map, mergeMap, Observable, of, tap } from 'rxjs';
+import { catchError, EMPTY, expand, finalize, forkJoin, from, last, map, merge, mergeMap, Observable, of, tap } from 'rxjs';
 import { JSDOM } from 'jsdom';
-import { BandcampAlbum } from './bandcamp-album.entity';
+import { AlbumType, BandcampAlbum } from './bandcamp-album.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { LibraryService } from 'src/library/library.service';
@@ -10,11 +10,14 @@ import { UserAlbum } from 'src/library/user-album.entity';
 import { User } from 'src/library/user.entity';
 import { BandcampArtist } from './bandcamp-artist.entity';
 import { BandcampTrack } from './bandcamp-track.entity';
-import { TasksService } from 'src/tasks/tasks.service';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
+import { SAVE_ALBUM_JOB } from './bandcamp.processor';
 
 const BANDCAMP_SEARCH_URL = 'https://bandcamp.com/search?q=';
 const BANDCAMP_LIBRARY_URL = 'https://bandcamp.com/';
 const BANDCAMP_COLLECTION_URL = 'https://bandcamp.com/api/fancollection/1/collection_items';
+const BANDCAMP_WISHLIST_URL = 'https://bandcamp.com/api/fancollection/1/wishlist_items';
 
 export interface BandcampArtistSearchResult {
 	name: string;
@@ -38,10 +41,15 @@ export class BandcampService {
 		@InjectRepository(BandcampTrack)
 		private readonly bandcampTrackRepository: Repository<BandcampTrack>,
 		private readonly libraryService: LibraryService,
-		private readonly tasksService: TasksService
+		@InjectQueue('bandcamp')
+		private readonly bandcampQueue: Queue
 	) {}
 
 	populateUserLibrary(userName: string) {
+		return this.getCollection(userName);
+	}
+
+	getCollection(userName: string) {
 		return this.httpService.get(`${BANDCAMP_LIBRARY_URL}${userName}`).pipe(
 			map(response => response.data),
 			mergeMap(response => {
@@ -52,16 +60,19 @@ export class BandcampService {
 
 				const fanId = pageData.fan_data.fan_id;
 				const lastToken = pageData.collection_data.last_token;
-				const itemCache = pageData.item_cache.collection;
+				const items = pageData.item_cache.collection;
+				const wishlistLastToken = pageData.wishlist_data.last_token;
 
-				return this.saveData({ items: Object.values(itemCache) }).pipe(
-					mergeMap(() => this.makeRequestAndSaveData(lastToken, fanId))
+				this.bandcampQueue.add(SAVE_ALBUM_JOB, { items: Object.values(items), type: AlbumType.collection })
+
+				return merge(
+					this.makeRequestAndSaveData(lastToken, fanId, AlbumType.collection),
+					this.makeRequestAndSaveData(wishlistLastToken, fanId, AlbumType.wishlist)
 				);
 			}),
-			expand(res => {
-				if (res.more_available) {
-					const fanId = res.items[0].fan_id;
-					return this.makeRequestAndSaveData(res.last_token, fanId);
+			expand(params => {
+				if (params.moreAvailable) {
+					return this.makeRequestAndSaveData(params.lastToken, params.fanId, params.type);
 				} else {
 					return EMPTY;
 				}
@@ -69,16 +80,24 @@ export class BandcampService {
 		);
 	}
 
-	makeRequestAndSaveData(lastToken: string, fanId: string) {
-		return this.httpService.post(BANDCAMP_COLLECTION_URL, {
+	makeRequestAndSaveData(lastToken: string, fanId: string, type: AlbumType) {
+		const url = type === AlbumType.collection ? BANDCAMP_COLLECTION_URL : BANDCAMP_WISHLIST_URL;
+
+		return this.httpService.post(url, {
 			count: 30,
 			fan_id: fanId,
 			older_than_token: lastToken
-		}).pipe(mergeMap(response => this.saveData(response.data)));
+		}).pipe(
+			map(response => response.data),
+			map(response => {
+				this.bandcampQueue.add(SAVE_ALBUM_JOB, { items: response.items, type })
+
+				return { fanId, lastToken: response.last_token, moreAvailable: response.more_available, type };
+			})
+		);
 	}
 
-	saveData(data) {
-		const items = data.items;
+	saveData({ items, type }) {
 		return forkJoin(items.map(item => {
 			const artist = this.bandcampArtistRepository.create({
 				bandcampId: item.band_id,
@@ -91,6 +110,7 @@ export class BandcampService {
 						name: item.item_title,
 						raw: item,
 						bandcampId: item.item_id,
+						albumType: type,
 						artists: [artist]
 					});
 
@@ -113,16 +133,12 @@ export class BandcampService {
 					return of(null);
 				})
 			)
-		})).pipe(map(() => data));
+		}));
 	}
 
 	populateAlbumTrackList(album) {
-		const task = this.tasksService.createTask();
-
-		task.started();
 		return this.httpService.get(album.raw.item_url).pipe(
 			catchError(error => {
-				task.failed({ error, album });
 				return EMPTY;
 			}),
 			map(response => response.data),
@@ -142,7 +158,6 @@ export class BandcampService {
 				}
 
 				if (!albumData) {
-					task.failed({ reason: 'no album data', album });
 					return void 0;
 				}
 				
@@ -154,7 +169,6 @@ export class BandcampService {
 				};
 
 				if (!albumData.track) {
-					task.failed({ reason: 'no tracklist', album });
 					return EMPTY;
 				}
 
@@ -169,11 +183,7 @@ export class BandcampService {
 				if (tracks.length > 0) {
 					return from(this.bandcampTrackRepository.save(tracks));
 				}
-				task.failed({ reason: 'no tracks created', album });
 				return EMPTY;
-			}),
-			finalize(() => {
-				task.completed();
 			})
 		)
 	}

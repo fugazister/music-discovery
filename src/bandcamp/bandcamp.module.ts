@@ -10,8 +10,8 @@ import { UserAlbum } from 'src/library/user-album.entity';
 import { BandcampArtist } from './bandcamp-artist.entity';
 import { BandcampTrack } from './bandcamp-track.entity';
 import { BandcampAlbumSubscriber } from './bandcamp-album.subscriber';
-import { TasksService } from 'src/tasks/tasks.service';
-import { TasksModule } from 'src/tasks/tasks.module';
+import { BullModule } from '@nestjs/bullmq';
+import { BandcampConsumer } from './bandcamp.processor';
 
 @Module({
 	imports: [
@@ -24,9 +24,11 @@ import { TasksModule } from 'src/tasks/tasks.module';
 			UserAlbum
 		]),
 		LibraryModule,
-		TasksModule
+		BullModule.registerQueue({
+			name: 'bandcamp',
+		})
 	],
-	providers: [BandcampService, BandcampAlbumSubscriber],
+	providers: [BandcampService, BandcampAlbumSubscriber, BandcampConsumer],
 	exports: [BandcampService],
 	controllers: [BandcampController]
 })

@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@nestjs/axios": "^3.0.2",
+    "@nestjs/bullmq": "^10.2.1",
     "@nestjs/common": "^10.0.0",
     "@nestjs/core": "^10.0.0",
     "@nestjs/platform-express": "^10.0.0",
@@ -30,6 +31,7 @@
     "@spotify/web-api-ts-sdk": "^1.2.0",
     "axios": "^1.7.5",
     "bee-queue": "^1.7.1",
+    "bullmq": "^5.12.10",
     "dotenv": "^16.4.5",
     "jsdom": "^24.1.1",
     "pg": "^8.12.0",
