@@ -1,7 +1,7 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Job } from 'bullmq';
-import { forkJoin, from, lastValueFrom, mergeMap, of } from 'rxjs';
+import { forkJoin, from, lastValueFrom, mergeMap, of, tap } from 'rxjs';
 import { SpotifyAlbum } from './spotify-album.entity';
 import { Repository } from 'typeorm';
 import { SpotifyArtist } from './spotify-artist.entity';
@@ -52,10 +52,16 @@ export class SpotifyConsumer extends WorkerHost {
 						}
 					})).pipe(mergeMap(found => {
 						if (!found) {
+							// after saving album notify library to add new album
 							return from(this.spotifyAlbumRepository.save(spotifyAlbumEntity));
 						}
 						return of(null);
 					}));
+				}),
+				tap((entity) => {
+					if (entity) {
+						
+					}
 				})
 			);
 		}));

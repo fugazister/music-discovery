@@ -9,6 +9,7 @@ import { LibraryController } from './library.controller';
 import { BandcampAlbum } from 'src/bandcamp/bandcamp-album.entity';
 import { SpotifyAlbum } from 'src/spotify/spotify-album.entity';
 import { SpotifyArtist } from 'src/spotify/spotify-artist.entity';
+import { LibraryConsumer } from './library.processor';
 
 @Module({
 	imports: [TypeOrmModule.forFeature([
@@ -20,7 +21,7 @@ import { SpotifyArtist } from 'src/spotify/spotify-artist.entity';
 		BandcampAlbum,
 		SpotifyArtist,
 	])],
-  providers: [LibraryService],
+  providers: [LibraryService, LibraryConsumer],
   controllers: [LibraryController],
 	exports: [LibraryService]
 })

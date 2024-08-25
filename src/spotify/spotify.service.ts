@@ -1,14 +1,12 @@
 import { HttpService } from '@nestjs/axios';
-import { ConsoleLogger, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { AxiosRequestConfig } from 'axios';
-import e, { Response } from 'express';
-import { delay, EMPTY, expand, forkJoin, from, iif, map, merge, mergeMap, of, tap } from 'rxjs';
+import { Response } from 'express';
+import { EMPTY, expand, from, iif, mergeMap, of } from 'rxjs';
 import { URLSearchParams } from 'url';
 import { Repository } from 'typeorm';
 import { SpotifyAlbum } from './spotify-album.entity';
 import { InjectRepository } from '@nestjs/typeorm';
-import { User } from 'src/library/user.entity';
-import { UserAlbum } from 'src/library/user-album.entity';
 import { LibraryService } from 'src/library/library.service';
 import { SpotifyArtist } from './spotify-artist.entity';
 import { SpotifySession } from './spotify-session.entity';

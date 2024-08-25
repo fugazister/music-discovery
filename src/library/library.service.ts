@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Album } from './album.entity';
-import { IsNull, Not, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { Artist } from './artist.entity';
 import { UserAlbum } from './user-album.entity';
 import { User } from './user.entity';
