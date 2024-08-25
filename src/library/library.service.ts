@@ -8,7 +8,7 @@ import { User } from './user.entity';
 import { SpotifyAlbum } from 'src/spotify/spotify-album.entity';
 import { BandcampAlbum } from 'src/bandcamp/bandcamp-album.entity';
 import { SpotifyArtist } from 'src/spotify/spotify-artist.entity';
-import { forkJoin, from, map, merge, mergeMap, tap, zip } from 'rxjs';
+import { catchError, EMPTY, forkJoin, from, map, merge, mergeMap, tap, zip } from 'rxjs';
 
 @Injectable()
 export class LibraryService {
@@ -29,16 +29,6 @@ export class LibraryService {
 		private readonly bandcampAlbumRepository: Repository<BandcampAlbum>
 	) {}
 
-	async populateAlbumsBySpotify() {
-		const albums = await this.spotifyAlbumRepository.find();
-		return albums;
-	}
-
-	async populateAlbumsByBandcamp() {
-		const albums = await this.bandcampAlbumRepository.find();
-		return albums;
-	}
-
 	async setUser() {
 		const me = await this.userRepository.findOne({
 			where: {
@@ -58,10 +48,73 @@ export class LibraryService {
 	}
 
 	populateAlbums() {
-		// need to create index with ids of services
+		return from(this.spotifyAlbumRepository.find({
+			relations: {
+				artists: true
+			},
+			select: {
+				id: true,
+				name: true,
+				spotifyId: true,
+				artists: {
+					name: true
+				}
+			}
+		})).pipe(
+			mergeMap(albums => {
+				return from(albums.map(album => {
+					return this.albumRepository.create({
+						spotifyAlbum: album,
+						artists: album.artists,
+						name: album.name,
+					});
+				}));
+			}),
+			mergeMap(albumEntity => {
+				return from(this.bandcampAlbumRepository.findOne({
+					relations: {
+						artists: true,
+					},
+					select: {
+						id: true,
+						bandcampId: true,
+						name: true,
+						artists: {
+							name: true
+						}
+					},
+					where: {
+						name: albumEntity.name,
+						artists: albumEntity.artists
+					}
+				})).pipe(
+					map(found => {
+						if (found) {
+							albumEntity.bandcampAlbum = found;
+						}
+
+						return albumEntity;
+					})
+				)
+			}),
+			mergeMap(albumEntity => {
+				return this.albumRepository.save(albumEntity);
+			}),
+			catchError((error, entity) => {
+				if (error) {
+					console.error('error saving album', entity, error);
+					return EMPTY;
+				}
+			})
+		);
 	}
 
 	getAlbums() {
-		return from(this.userAlbumRepository.find());
+		return from(this.albumRepository.find({
+			relations: {
+				bandcampAlbum: true,
+				spotifyAlbum: true,
+			}
+		}));
 	}
 }

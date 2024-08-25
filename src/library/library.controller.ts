@@ -7,16 +7,6 @@ export class LibraryController {
 		private libraryService: LibraryService
 	) {}
 
-	@Post('spotify/albums')
-	populateAlbumsBySpotify() {
-		return this.libraryService.populateAlbumsBySpotify();
-	}
-
-	@Post('bandcamp/albums')
-	populateAlbumsByBandcamp() {
-		return this.libraryService.populateAlbumsByBandcamp();
-	}
-
 	@Post('albums')
 	populateAlbums() {
 		return this.libraryService.populateAlbums();

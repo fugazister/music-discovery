@@ -122,7 +122,7 @@ export class BandcampService {
 		task.started();
 		return this.httpService.get(album.raw.item_url).pipe(
 			catchError(error => {
-				task.failed(error);
+				task.failed({ error, album });
 				return EMPTY;
 			}),
 			map(response => response.data),
@@ -142,7 +142,7 @@ export class BandcampService {
 				}
 
 				if (!albumData) {
-					task.failed('no album data');
+					task.failed({ reason: 'no album data', album });
 					return void 0;
 				}
 				
@@ -154,7 +154,7 @@ export class BandcampService {
 				};
 
 				if (!albumData.track) {
-					task.failed('no tracklist');
+					task.failed({ reason: 'no tracklist', album });
 					return EMPTY;
 				}
 
@@ -169,7 +169,7 @@ export class BandcampService {
 				if (tracks.length > 0) {
 					return from(this.bandcampTrackRepository.save(tracks));
 				}
-				task.failed('no tracks created');
+				task.failed({ reason: 'no tracks created', album });
 				return EMPTY;
 			}),
 			finalize(() => {
@@ -182,6 +182,12 @@ export class BandcampService {
 		return this.bandcampAlbumRepository.find({
 			relations: {
 				artists: true
+			},
+			select: {
+				name: true,
+				id: true,
+				artists: true,
+				bandcampId: true,
 			}
 		});
 	}
