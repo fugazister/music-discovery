@@ -1,8 +1,8 @@
 import { HttpService } from '@nestjs/axios';
 import { ConsoleLogger, Injectable } from '@nestjs/common';
 import { AxiosRequestConfig } from 'axios';
-import { Response } from 'express';
-import { delay, EMPTY, expand, forkJoin, from, map, merge, mergeMap, of, tap } from 'rxjs';
+import e, { Response } from 'express';
+import { delay, EMPTY, expand, forkJoin, from, iif, map, merge, mergeMap, of, tap } from 'rxjs';
 import { URLSearchParams } from 'url';
 import { Repository } from 'typeorm';
 import { SpotifyAlbum } from './spotify-album.entity';
@@ -11,27 +11,18 @@ import { User } from 'src/library/user.entity';
 import { UserAlbum } from 'src/library/user-album.entity';
 import { LibraryService } from 'src/library/library.service';
 import { SpotifyArtist } from './spotify-artist.entity';
-
-interface SpotifyAccessInfo {
-	accessToken: string;
-	tokenType: string;
-	refreshToken: string;
-}
+import { SpotifySession } from './spotify-session.entity';
 
 @Injectable()
 export class SpotifyService {
-	access: SpotifyAccessInfo;
-
 	constructor(
 		private readonly httpService: HttpService,
 		@InjectRepository(SpotifyArtist)
 		private readonly spotifyArtistRepository: Repository<SpotifyArtist>,
 		@InjectRepository(SpotifyAlbum)
 		private readonly spotifyAlbumRepository: Repository<SpotifyAlbum>,
-		@InjectRepository(User)
-		private readonly userRepository: Repository<User>,
-		@InjectRepository(UserAlbum)
-		private readonly userAlbumRepository: Repository<UserAlbum>,
+		@InjectRepository(SpotifySession)
+		private readonly sessionRepository: Repository<SpotifySession>,
 		private readonly libraryService: LibraryService
 	) {}
 
@@ -61,71 +52,115 @@ export class SpotifyService {
 			}),
 		};
 
-		return this.httpService.request(requestParams).pipe(map(result => {
-			this.access = {
-				accessToken: result.data.access_token,
-				tokenType: result.data.token_type,
-				refreshToken: result.data.refresh_token
-			};
-
-			return result.data;
+		return this.httpService.request(requestParams).pipe(mergeMap(result => {
+			return this.libraryService.getUser().pipe(mergeMap(user => {
+				return from(this.sessionRepository.upsert({
+					refreshToken: result.data.refresh_token,
+					accessToken: result.data.access_token,
+					expiresIn: result.data.expires_in,
+					user
+				}, ['user.id']));
+			}))
 		}));
 	}
 
 	refreshAccessToken(refreshToken) {
-	
+		const requestParams: AxiosRequestConfig = {
+			url: 'https://accounts.spotify.com/api/token',
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/x-www-form-urlencoded',
+			},
+			data: new URLSearchParams({
+				grant_type: 'refresh_token',
+				refresh_token: refreshToken,
+				client_id: process.env.SPOTIFY_CLIENT_ID
+			})
+		};
+
+		return this.httpService.request(requestParams).pipe(mergeMap(result => {
+			return this.libraryService.getUser().pipe(mergeMap(user => {
+				return from(this.sessionRepository.upsert({
+					refreshToken: result.data.refresh_token,
+					accessToken: result.data.access_token,
+					expiresIn: result.data.expires_in,
+					user
+				}, ['user.id']));
+			}))
+		}));
 	}
 
 	makeRequestAndSaveData(url: string) {
-		const requestParams = {
-			method: 'GET',
-			url,
-			headers: { 'Authorization': 'Bearer ' + this.access.accessToken },
-			json: true
-		};
+		return this.libraryService.getUser().pipe(
+			mergeMap(user => {
+				if (!user) return EMPTY;
 
-		return this.httpService.request(requestParams).pipe(
-			mergeMap(result => {
-				const items = result.data.items;
+				return this.sessionRepository.findOne({
+					where: {
+						user: user
+					}
+				})
+			}),
+			mergeMap(session => {
+				if (!session) return EMPTY;
 
-				if (items.length > 0) {
-					return forkJoin(items.map(item => {
-						const artists = item.album.artists.map(artist => {
-							return this.spotifyArtistRepository.create({
-								name: artist.name,
-								spotifyId: artist.id,
-								raw: artist
-							});
-						});
+				const currentTime = new Date();
+				const expiresAt = new Date();
+				expiresAt.setSeconds(expiresAt.getSeconds() + session.expiresIn);
 
-						return from(this.spotifyArtistRepository.upsert(artists, ['spotifyId'])).pipe(
-							mergeMap((res) => {
-								console.log('spotifyArtistRepository.upsert', res)
-								const spotifyAlbumEntity = this.spotifyAlbumRepository.create({
-									name: item.album.name,
-									raw: item.album,
-									spotifyId: item.album.id,
-									trackList: item.album.tracks.items,
-									artists: artists
+				return iif(
+					() => expiresAt < currentTime,
+					this.refreshAccessToken(session.refreshToken).pipe(mergeMap(() => {
+						return this.makeRequestAndSaveData(url);
+					})),
+					this.httpService.request({
+						method: 'GET',
+						url,
+						headers: { 'Authorization': 'Bearer ' + session.accessToken },
+					})
+				).pipe(
+					mergeMap((result: any) => {
+						const items = result.data.items;
+		
+						if (items.length > 0) {
+							return forkJoin(items.map(item => {
+								const artists = item.album.artists.map(artist => {
+									return this.spotifyArtistRepository.create({
+										name: artist.name,
+										spotifyId: artist.id,
+										raw: artist
+									});
 								});
-
-								return from(this.spotifyAlbumRepository.findOne({
-									where: {
-										spotifyId: spotifyAlbumEntity.spotifyId
-									}
-								})).pipe(mergeMap(found => {
-									if (!found) {
-										return from(this.spotifyAlbumRepository.save(spotifyAlbumEntity));
-									}
-									return of(null);
-								}));
-							})
-						);
-
-					})).pipe(map(() => result.data));
-				}
-
-				return of(result.data);
+		
+								return from(this.spotifyArtistRepository.upsert(artists, ['spotifyId'])).pipe(
+									mergeMap((res) => {
+										const spotifyAlbumEntity = this.spotifyAlbumRepository.create({
+											name: item.album.name,
+											raw: item.album,
+											spotifyId: item.album.id,
+											trackList: item.album.tracks.items,
+											artists: artists
+										});
+		
+										return from(this.spotifyAlbumRepository.findOne({
+											where: {
+												spotifyId: spotifyAlbumEntity.spotifyId
+											}
+										})).pipe(mergeMap(found => {
+											if (!found) {
+												return from(this.spotifyAlbumRepository.save(spotifyAlbumEntity));
+											}
+											return of(null);
+										}));
+									})
+								);
+		
+							})).pipe(map(() => result.data));
+						}
+		
+						return of(result.data);
+					})
+				);
 			})
 		);
 	}
@@ -139,7 +174,7 @@ export class SpotifyService {
 		const url = 'https://api.spotify.com/v1/me/albums?' + queryParams.toString();
 
 		return this.makeRequestAndSaveData(url).pipe(
-			expand(res => {
+			expand((res: any) => {
 				if (res.next) {
 					return this.makeRequestAndSaveData(res.next);
 				} else {

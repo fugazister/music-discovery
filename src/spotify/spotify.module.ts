@@ -9,6 +9,7 @@ import { User } from 'src/library/user.entity';
 import { UserAlbum } from 'src/library/user-album.entity';
 import { LibraryModule } from 'src/library/library.module';
 import { SpotifyArtist } from './spotify-artist.entity';
+import { SpotifySession } from './spotify-session.entity';
 
 @Module({
 	imports: [
@@ -16,7 +17,8 @@ import { SpotifyArtist } from './spotify-artist.entity';
 			SpotifyAlbum,
 			SpotifyArtist,
 			User,
-			UserAlbum
+			UserAlbum,
+			SpotifySession
 		]),
 		HttpModule,
 		LibraryModule

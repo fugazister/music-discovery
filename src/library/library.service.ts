@@ -29,18 +29,28 @@ export class LibraryService {
 		private readonly bandcampAlbumRepository: Repository<BandcampAlbum>
 	) {}
 
-	async setUser() {
-		const me = await this.userRepository.findOne({
+	setUser() {
+		from(this.userRepository.findOne({
 			where: {
 				name: 'me'
 			}
-		});
+		})).pipe(mergeMap(user => {
+			if (!user) {
+				return this.userRepository.insert({
+					name: 'me'
+				});
+			}
 
-		if (!me) {
-			this.userRepository.insert({
+			return EMPTY;
+		}))
+	}
+
+	getUser() {
+		return from(this.userRepository.findOne({
+			where: {
 				name: 'me'
-			});
-		}
+			}
+		}));
 	}
 
 	getArtists() {

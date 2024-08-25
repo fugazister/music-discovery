@@ -18,6 +18,7 @@ import { BandcampArtist } from './bandcamp/bandcamp-artist.entity';
 import { BandcampTrack } from './bandcamp/bandcamp-track.entity';
 import { TaskEntity } from './tasks/task.entity';
 import { TasksModule } from './tasks/tasks.module';
+import { SpotifySession } from './spotify/spotify-session.entity';
 
 @Module({
 	imports: [
@@ -39,6 +40,7 @@ import { TasksModule } from './tasks/tasks.module';
 				User,
 				UserAlbum,
 				TaskEntity,
+				SpotifySession,
 			],
 			synchronize: true,
 		}),
